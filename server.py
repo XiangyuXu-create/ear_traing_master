@@ -20,7 +20,35 @@ MEDIA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "media")
 MISTAKE_FILE = os.path.join(MEDIA_DIR, "mistake_collection.json")
 os.makedirs(MEDIA_DIR, exist_ok=True)
 
-ALL_CANDIDATES = ["A3", "B3", "C4", "D4", "E4", "F4", "G4", "A4", "B4", "C5", "D5"]
+# 完整白键 A1~A6（供下拉框选择范围）
+
+
+def _build_all_white_keys():
+    """生成 A1~A6 所有白键列表（按音高排序）。"""
+    from ear_traing_lesson.lesson1 import midi_note
+    notes = []
+    for octave in range(1, 7):
+        for name in ["C", "D", "E", "F", "G", "A", "B"]:
+            n = midi_note(name, octave)
+            if 21 <= n <= 108:
+                notes.append(f"{name}{octave}")
+    # 按 MIDI 音高排序
+    notes.sort(key=lambda x: midi_note(x[0], int(x[1:])))
+    return notes
+
+
+ALL_NOTES = _build_all_white_keys()
+
+
+def _notes_in_range(low: str, high: str):
+    """返回范围内所有白键。"""
+    if low not in ALL_NOTES or high not in ALL_NOTES:
+        return ALL_NOTES
+    lo = ALL_NOTES.index(low)
+    hi = ALL_NOTES.index(high)
+    if lo > hi:
+        lo, hi = hi, lo
+    return ALL_NOTES[lo:hi + 1]
 
 
 # -------------------- 渲染单个练习 --------------------
@@ -99,8 +127,10 @@ def generate_session(low_note, high_note, repeat_count, max_exercises, preset):
         "user_answers": [], "is_finished": False,
     }
     progress = f"第 1/{total} 题"
+    range_choices = _notes_in_range(low_note, high_note)
     return (
         state, wav_paths[0], progress,
+        gr.update(choices=range_choices, value=None, interactive=True),
         gr.update(visible=True), gr.update(visible=False),
         "", [], gr.update(choices=[], visible=False),
         format_mistakes(),
@@ -110,6 +140,7 @@ def generate_session(low_note, high_note, repeat_count, max_exercises, preset):
 def submit_and_continue(state, guess):
     if state is None:
         return (None, None, "⚠️ 请先生成练习",
+                gr.update(interactive=False),
                 gr.update(visible=True), gr.update(visible=False),
                 "", [], gr.update(choices=[], visible=False),
                 format_mistakes())
@@ -136,6 +167,7 @@ def submit_and_continue(state, guess):
         progress = f"第 {new_idx+1}/{state['total']} 题"
         return (
             state, state["wav_paths"][new_idx], progress,
+            gr.update(value=None, interactive=True),
             gr.update(visible=True), gr.update(visible=False),
             "", [], gr.update(choices=[], visible=False),
             format_mistakes(),
@@ -179,6 +211,7 @@ def finish_session(state):
 
     return (
         state, None, progress,
+        gr.update(choices=[], interactive=False),
         gr.update(visible=False), gr.update(visible=True),
         result_md, table_data,
         gr.update(choices=replay_choices, value=replay_choices[0], visible=True),
@@ -221,10 +254,6 @@ CSS = """
               font-family: 'DejaVu Sans Mono', 'Consolas', 'Menlo', 'Courier New', monospace !important;
               letter-spacing: 4px; }
 #subtitle { text-align: center; }
-.answer-btn-row { justify-content: center; gap: 8px; flex-wrap: wrap; }
-.answer-btn-row button { min-width: 68px !important; height: 46px !important;
-                         font-size: 1.15em !important; font-weight: 700 !important;
-                         font-family: 'DejaVu Sans Mono', 'Consolas', 'Menlo', 'Courier New', monospace !important; }
 """
 
 with gr.Blocks(title="ear_traing_master") as demo:
@@ -235,8 +264,8 @@ with gr.Blocks(title="ear_traing_master") as demo:
 
     # ---- 配置区 ----
     with gr.Row():
-        low_note = gr.Dropdown(choices=ALL_CANDIDATES, value="A3", label="最低音", scale=1)
-        high_note = gr.Dropdown(choices=ALL_CANDIDATES, value="D5", label="最高音", scale=1)
+        low_note = gr.Dropdown(choices=ALL_NOTES, value="A3", label="最低音", scale=1)
+        high_note = gr.Dropdown(choices=ALL_NOTES, value="D5", label="最高音", scale=1)
         repeat_count = gr.Slider(1, 10, value=3, step=1, label="重复次数", scale=1)
         max_exercises = gr.Slider(1, 20, value=10, step=1, label="练习条数", scale=1)
 
@@ -247,22 +276,17 @@ with gr.Blocks(title="ear_traing_master") as demo:
     gr.Markdown("---")
 
     # ---- 练习区（答题时可见） ----
-    answer_btns = []
     with gr.Column(visible=True) as exercise_panel:
         progress_text = gr.Textbox(value="等待生成...", label="进度", interactive=False)
         replay_btn = gr.Button("🔄 重播", scale=0)
 
         audio_player = gr.Audio(label="🎧 点击播放", type="filepath", interactive=False)
 
-        gr.Markdown("### 🎯 选择你听到的音（点击即提交）")
-        with gr.Row(elem_classes="answer-btn-row"):
-            for note in ALL_CANDIDATES[:6]:
-                btn = gr.Button(note, scale=1, elem_classes="answer-btn-row")
-                answer_btns.append((btn, note))
-        with gr.Row(elem_classes="answer-btn-row"):
-            for note in ALL_CANDIDATES[6:]:
-                btn = gr.Button(note, scale=1, elem_classes="answer-btn-row")
-                answer_btns.append((btn, note))
+        answer_radio = gr.Radio(
+            choices=_notes_in_range("A3", "D5"),
+            label="🎯 选择你听到的音", interactive=True, value=None,
+        )
+        submit_btn = gr.Button("✅ 提交答案", variant="primary")
 
     # ---- 结果区（完成后可见） ----
     with gr.Column(visible=False) as result_panel:
@@ -287,7 +311,7 @@ with gr.Blocks(title="ear_traing_master") as demo:
 
     # ---- 事件绑定 ----
     outputs_all = [
-        state, audio_player, progress_text,
+        state, audio_player, progress_text, answer_radio,
         exercise_panel, result_panel,
         result_md, result_df, replay_dropdown,
         mistake_display,
@@ -299,18 +323,11 @@ with gr.Blocks(title="ear_traing_master") as demo:
         outputs=outputs_all,
     )
 
-    # 每个答案按钮绑定 submit（用工厂函数避免闭包 late-binding）
-    def _make_handler(note_val):
-        def handler(s):
-            return submit_and_continue(s, note_val)
-        return handler
-
-    for btn, note in answer_btns:
-        btn.click(
-            fn=_make_handler(note),
-            inputs=[state],
-            outputs=outputs_all,
-        )
+    submit_btn.click(
+        fn=submit_and_continue,
+        inputs=[state, answer_radio],
+        outputs=outputs_all,
+    )
 
     replay_btn.click(
         fn=replay_current, inputs=[state], outputs=[audio_player],
