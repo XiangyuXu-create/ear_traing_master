@@ -1,7 +1,7 @@
 """
 ear_traing_master 主页面
 =======================
-Tab 管理：Lesson 1 单音辨听 / Lesson 2 旋律辨听
+Tab 管理：Lesson 1-4
 """
 
 import gradio as gr
@@ -11,7 +11,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from pages.common import format_mistakes
-from pages import lesson1_page, lesson2_page
+from pages import lesson1_page, lesson2_page, lesson3_page, lesson4_page
 
 CSS = """
 .gradio-container { max-width: 800px !important; margin: 0 auto !important; }
@@ -31,10 +31,14 @@ with gr.Blocks(title="ear_traing_master") as demo:
         )
 
     with gr.Tabs():
-        with gr.Tab("Lesson 1: 单音辨听"):
+        with gr.Tab("Lesson 1: 单音辨听（白键）"):
             lesson1_page.build_ui(mistake_display)
-        with gr.Tab("Lesson 2: 旋律辨听"):
+        with gr.Tab("Lesson 2: 旋律辨听（白键）"):
             lesson2_page.build_ui(mistake_display)
+        with gr.Tab("Lesson 3: 单音辨听（全音阶）"):
+            lesson3_page.build_ui(mistake_display)
+        with gr.Tab("Lesson 4: 旋律辨听（全音阶）"):
+            lesson4_page.build_ui(mistake_display)
 
 
 if __name__ == "__main__":
