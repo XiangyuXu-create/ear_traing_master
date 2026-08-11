@@ -22,7 +22,7 @@ def build_ui(mistake_display):
         l2_high = gr.Dropdown(choices=ALL_NOTES, value="D5", label="最高音", scale=1)
         l2_note_cnt = gr.Slider(2, 8, value=5, step=1, label="音符数量", scale=1)
         l2_gap = gr.Dropdown(choices=["100", "300", "500", "800", "1000", "1500", "2000"], value="500", label="音符间隔(ms)", scale=1)
-        l2_count = gr.Slider(1, 20, value=10, step=1, label="练习条数", scale=1)
+        l2_count = gr.Slider(1, 20, value=1, step=1, label="练习条数", scale=1)
 
     with gr.Row():
         l2_preset = gr.Radio(choices=["piano", "guitar", "voice"], value="piano", label="音色")
@@ -91,44 +91,47 @@ def build_ui(mistake_display):
         return " → ".join(parts)
 
     def add_note(st, note):
-        """点击 radio → 添加到当前选择。"""
-        if st is None or st["is_finished"] or note is None:
+        """点击 radio → 添加到当前选择。防重入：跳过 None 和重复触发。"""
+        if st is None or st.get("_busy") or st["is_finished"] or note is None:
             if st is None:
-                return (None, None, "⚠️ 请先生成", "",
+                return (None, gr.update(), "⚠️ 请先生成", "",
                         gr.update(interactive=False),
                         gr.update(visible=True), gr.update(visible=False),
                         "", [], gr.update(choices=[], visible=False), format_mistakes())
-            return (st, st["wav_paths"][st["ex_idx"]], f"旋律 {st['ex_idx']+1}/{st['total_ex']}",
+            return (st, gr.update(),
+                    f"旋律 {st['ex_idx']+1}/{st['total_ex']}",
                     _fmt_answer(st["current_selections"], st["notes_per_ex"]),
-                    gr.update(value=None, interactive=True),
+                    gr.update(),
                     gr.update(visible=True), gr.update(visible=False),
                     "", [], gr.update(choices=[], visible=False), format_mistakes())
 
         if len(st["current_selections"]) >= st["notes_per_ex"]:
-            return (st, st["wav_paths"][st["ex_idx"]], f"旋律 {st['ex_idx']+1}/{st['total_ex']}",
+            return (st, gr.update(),
+                    f"旋律 {st['ex_idx']+1}/{st['total_ex']}",
                     _fmt_answer(st["current_selections"], st["notes_per_ex"]),
-                    gr.update(value=None, interactive=True),
+                    gr.update(),
                     gr.update(visible=True), gr.update(visible=False),
                     "", [], gr.update(choices=[], visible=False), format_mistakes())
 
+        st["_busy"] = True
         st["current_selections"].append(note.strip().upper())
-        ans_text = _fmt_answer(st["current_selections"], st["notes_per_ex"])
-        return (st, st["wav_paths"][st["ex_idx"]], f"旋律 {st['ex_idx']+1}/{st['total_ex']}",
-                ans_text,
-                gr.update(value=None, interactive=True),
-                gr.update(visible=True), gr.update(visible=False),
-                "", [], gr.update(choices=[], visible=False), format_mistakes())
+        result = (st, gr.update(),
+                  f"旋律 {st['ex_idx']+1}/{st['total_ex']}",
+                  _fmt_answer(st["current_selections"], st["notes_per_ex"]),
+                  gr.update(value=None),
+                  gr.update(visible=True), gr.update(visible=False),
+                  "", [], gr.update(choices=[], visible=False), format_mistakes())
+        st["_busy"] = False
+        return result
 
     def undo_note(st):
-        """撤销最后一个选择。"""
         if st is None or st["is_finished"]:
-            return (st, None, "", "", gr.update(), gr.update(), gr.update(), "", [], gr.update(), format_mistakes())
+            return (st, gr.update(), "", "", gr.update(), gr.update(), gr.update(), "", [], gr.update(), format_mistakes())
         if st["current_selections"]:
             st["current_selections"].pop()
-        ans_text = _fmt_answer(st["current_selections"], st["notes_per_ex"])
-        return (st, st["wav_paths"][st["ex_idx"]], f"旋律 {st['ex_idx']+1}/{st['total_ex']}",
-                ans_text,
-                gr.update(value=None, interactive=True),
+        return (st, gr.update(), f"旋律 {st['ex_idx']+1}/{st['total_ex']}",
+                _fmt_answer(st["current_selections"], st["notes_per_ex"]),
+                gr.update(),
                 gr.update(visible=True), gr.update(visible=False),
                 "", [], gr.update(choices=[], visible=False), format_mistakes())
 
